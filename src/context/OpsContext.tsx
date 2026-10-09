@@ -8,173 +8,234 @@ import {
   type ReactNode,
 } from 'react'
 import {
-  defaultFailures,
-  seedAudit,
-  seedHealth,
-  seedKpis,
-  seedOrders,
-  seedWorkflow,
-} from '../data/mock'
+  activateOrder as apiActivateOrder,
+  checkAllServicesHealth,
+  fetchAllOrders,
+  fetchAdminAlerts,
+  fetchMetrics,
+  fetchUserNotifications,
+  toggleServiceChaos as apiToggleChaos,
+} from '../lib/api'
 import type {
-  AuditEvent,
-  DomainService,
-  FailureMap,
-  FailureMode,
-  KpiSnapshot,
-  Order,
-  OrderStatus,
-  ServiceHealth,
-  WorkflowStepView,
+  AuthUser,
+  ChaosServiceKey,
+  ChaosState,
+  MetricsDTO,
+  NotificationLog,
+  PlanName,
+  ServiceHealthItem,
+  TelecomOrder,
 } from '../types'
 
 interface OpsContextValue {
-  orders: Order[]
-  kpis: KpiSnapshot
-  workflow: WorkflowStepView[]
-  health: ServiceHealth[]
-  audit: AuditEvent[]
-  failures: FailureMap
-  setFailure: (service: DomainService, mode: FailureMode) => void
+  orders: TelecomOrder[]
+  kpis: MetricsDTO
+  chaosState: ChaosState
+  toggleChaos: (service: ChaosServiceKey) => Promise<void>
+  isTogglingChaos: boolean
+  currentUser: AuthUser | null
+  setCurrentUser: (user: AuthUser | null) => void
+  logout: () => void
+  userNotifications: NotificationLog[]
+  adminNotifications: NotificationLog[]
+  serviceHealth: ServiceHealthItem[]
+  refreshAll: () => Promise<void>
+  submitOrder: (planName: PlanName) => Promise<TelecomOrder>
   clock: Date
+}
+
+const defaultChaosState: ChaosState = {
+  inventory: { active: false, message: 'Normal (Happy Path)' },
+  network: { active: false, message: 'Normal (Happy Path)' },
+  billing: { active: false, message: 'Normal (Happy Path)' },
+}
+
+const defaultKpis: MetricsDTO = {
+  totalOrders: 0,
+  successCount: 0,
+  failedCount: 0,
+  inProgressCount: 0,
+  successRatePercent: 100,
+  avgActivationDurationMs: null,
 }
 
 const OpsContext = createContext<OpsContextValue | null>(null)
 
-function applyFailures(orders: Order[], failures: FailureMap): Order[] {
-  return orders.map((order) => {
-    if (order.status === 'ACTIVE' || order.status === 'ROLLED_BACK') {
-      return order
-    }
-    const mode = failures[order.currentStep.toLowerCase() as DomainService]
-    if (mode === 'NONE') {
-      if (order.status === 'RETRYING' || order.status === 'FAILED') {
-        return { ...order, status: 'IN_PROGRESS', attempts: order.attempts }
-      }
-      return order
-    }
-    if (mode === 'TRANSIENT' || mode === 'TIMEOUT') {
-      return {
-        ...order,
-        status: 'RETRYING' as OrderStatus,
-        attempts: Math.max(order.attempts, 2),
-      }
-    }
-    return {
-      ...order,
-      status: order.attempts >= 3 ? 'ROLLED_BACK' : 'FAILED',
-      attempts: Math.max(order.attempts, 3),
-    }
-  })
-}
-
 export function OpsProvider({ children }: { children: ReactNode }) {
-  const [failures, setFailures] = useState<FailureMap>(defaultFailures)
-  const [orders, setOrders] = useState<Order[]>(() =>
-    applyFailures(seedOrders, defaultFailures),
-  )
-  const [kpis, setKpis] = useState<KpiSnapshot>(seedKpis)
-  const [workflow, setWorkflow] = useState<WorkflowStepView[]>(seedWorkflow)
-  const [health, setHealth] = useState<ServiceHealth[]>(seedHealth)
-  const [audit, setAudit] = useState<AuditEvent[]>(seedAudit)
+  const [orders, setOrders] = useState<TelecomOrder[]>([])
+  const [kpis, setKpis] = useState<MetricsDTO>(defaultKpis)
+  const [chaosState, setChaosState] = useState<ChaosState>(defaultChaosState)
+  const [isTogglingChaos, setIsTogglingChaos] = useState(false)
+  const [serviceHealth, setServiceHealth] = useState<ServiceHealthItem[]>([])
+  const [userNotifications, setUserNotifications] = useState<NotificationLog[]>([])
+  const [adminNotifications, setAdminNotifications] = useState<NotificationLog[]>([])
   const [clock, setClock] = useState(() => new Date())
 
-  const setFailure = useCallback((service: DomainService, mode: FailureMode) => {
-    setFailures((prev) => ({ ...prev, [service]: mode }))
+  const [currentUser, setCurrentUserState] = useState<AuthUser | null>(() => {
+    try {
+      const saved = localStorage.getItem('teleflow_user')
+      if (saved) return JSON.parse(saved) as AuthUser
+    } catch {
+      // ignore
+    }
+    return {
+      token: localStorage.getItem('teleflow_token') || 'demo-token',
+      tokenType: 'Bearer',
+      customerId: 'CUST-001',
+      email: 'customer@teleflow.io',
+      fullName: 'Alex Morgan',
+      role: 'ROLE_USER',
+    }
+  })
+
+  const setCurrentUser = useCallback((user: AuthUser | null) => {
+    setCurrentUserState(user)
+    if (user) {
+      localStorage.setItem('teleflow_user', JSON.stringify(user))
+      localStorage.setItem('teleflow_token', user.token)
+    } else {
+      localStorage.removeItem('teleflow_user')
+      localStorage.removeItem('teleflow_token')
+    }
   }, [])
 
-  useEffect(() => {
-    setOrders((prev) => applyFailures(prev, failures))
-    setWorkflow((prev) =>
-      prev.map((step) => {
-        const mode = failures[step.step.toLowerCase() as DomainService]
-        if (mode === 'NONE') {
-          const state =
-            step.step === 'NOTIFICATION' ? 'PENDING' : step.step === 'BILLING' ? 'RUNNING' : 'SUCCESS'
+  const logout = useCallback(() => {
+    setCurrentUser(null)
+  }, [setCurrentUser])
+
+  // Global Refresh from Backend
+  const refreshAll = useCallback(async () => {
+    try {
+      const [fetchedOrders, fetchedMetrics, health] = await Promise.all([
+        fetchAllOrders(0, 50),
+        fetchMetrics(),
+        checkAllServicesHealth(),
+      ])
+
+      if (fetchedOrders && fetchedOrders.length > 0) {
+        setOrders(fetchedOrders)
+      }
+      if (fetchedMetrics) {
+        setKpis(fetchedMetrics)
+      }
+      setServiceHealth(health)
+
+      // Admin alerts
+      const adminLogs = await fetchAdminAlerts()
+      if (adminLogs && adminLogs.length > 0) {
+        setAdminNotifications(adminLogs)
+      }
+
+      // User notifications
+      if (currentUser?.customerId) {
+        const userLogs = await fetchUserNotifications(currentUser.customerId)
+        if (userLogs && userLogs.length > 0) {
+          setUserNotifications(userLogs)
+        }
+      }
+    } catch (e) {
+      console.warn('Backend sync polling error (services may still be starting):', e)
+    }
+  }, [currentUser?.customerId])
+
+  // Real Chaos Toggle Action
+  const toggleChaos = useCallback(
+    async (service: ChaosServiceKey) => {
+      setIsTogglingChaos(true)
+      try {
+        const res = await apiToggleChaos(service)
+        setChaosState((prev) => ({
+          ...prev,
+          [service]: {
+            active: res.chaosModeActive,
+            message: res.message,
+            lastToggled: new Date().toLocaleTimeString(),
+          },
+        }))
+      } catch (err: any) {
+        // Optimistic toggle fallback if service endpoint unreachable
+        setChaosState((prev) => {
+          const current = prev[service].active
           return {
-            ...step,
-            state: step.step === 'NOTIFICATION' ? 'PENDING' : state,
-            latencyMs: step.step === 'BILLING' ? 214 : step.latencyMs,
+            ...prev,
+            [service]: {
+              active: !current,
+              message: !current ? 'Simulated Chaos Active' : 'Normal (Happy Path)',
+              lastToggled: new Date().toLocaleTimeString(),
+            },
           }
-        }
-        if (mode === 'TRANSIENT' || mode === 'TIMEOUT') {
-          return { ...step, state: 'RUNNING', latencyMs: mode === 'TIMEOUT' ? 2400 : 890 }
-        }
-        return { ...step, state: 'FAILED', latencyMs: 1800 }
-      }),
-    )
-    setHealth((prev) =>
-      prev.map((svc) => {
-        const key = svc.id === 'inv' ? 'inventory' : svc.id === 'net' ? 'network' : svc.id === 'bill' ? 'billing' : svc.id === 'ntf' ? 'notification' : null
-        if (!key) return svc
-        const mode = failures[key]
-        if (mode === 'NONE') {
-          return { ...svc, status: 'OPERATIONAL', responseMs: svc.id === 'bill' ? 118 : svc.responseMs, uptime: Math.max(svc.uptime, 99.9) }
-        }
-        if (mode === 'PERMANENT') {
-          return { ...svc, status: 'OUTAGE', responseMs: 0, uptime: Math.min(svc.uptime, 97.2) }
-        }
-        return { ...svc, status: 'DEGRADED', responseMs: mode === 'TIMEOUT' ? 3200 : 740, uptime: 99.1 }
-      }),
-    )
-  }, [failures])
+        })
+      } finally {
+        setIsTogglingChaos(false)
+        refreshAll()
+      }
+    },
+    [refreshAll],
+  )
 
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setClock(new Date())
-      setOrders((prev) =>
-        prev.map((order) => {
-          if (order.status !== 'IN_PROGRESS' && order.status !== 'RETRYING') {
-            return order
-          }
-          return { ...order, durationSec: order.durationSec + 1 }
-        }),
-      )
-      setKpis((prev) => ({
-        ...prev,
-        activeOrders: 240 + Math.floor(Math.random() * 14),
-        avgActivationSec: 40 + Math.floor(Math.random() * 5),
-      }))
-    }, 1800)
-    return () => window.clearInterval(id)
-  }, [])
+  // Submit Order / Buy Telecom Plan
+  const submitOrder = useCallback(
+    async (planName: PlanName) => {
+      const customerId = currentUser?.customerId || 'CUST-001'
+      const customerEmail = currentUser?.email || 'customer@teleflow.io'
 
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      const now = new Date()
-      const stamp = now.toTimeString().slice(0, 5)
-      const live = orders.find((o) => o.status === 'IN_PROGRESS' || o.status === 'RETRYING')
-      if (!live) return
-      const step = live.currentStep
-      setAudit((prev) => {
-        const next: AuditEvent = {
-          id: `live-${now.getTime()}`,
-          time: stamp,
-          title:
-            live.status === 'RETRYING'
-              ? `Retry on ${step}`
-              : `${step.charAt(0)}${step.slice(1).toLowerCase()} heartbeat`,
-          detail: `${live.id} · attempt ${live.attempts} · ${live.durationSec}s elapsed`,
-          tone: live.status === 'RETRYING' ? 'warning' : 'info',
-          orderId: live.id,
-        }
-        return [next, ...prev].slice(0, 40)
+      const newOrder = await apiActivateOrder({
+        customerId,
+        planName,
+        customerEmail,
       })
-    }, 7000)
-    return () => window.clearInterval(id)
-  }, [orders])
+
+      // Immediate UI update
+      setOrders((prev) => [newOrder, ...prev.filter((o) => o.id !== newOrder.id)])
+      await refreshAll()
+      return newOrder
+    },
+    [currentUser, refreshAll],
+  )
+
+  // Periodic Polling
+  useEffect(() => {
+    refreshAll()
+    const timer = window.setInterval(() => {
+      setClock(new Date())
+      refreshAll()
+    }, 3000)
+    return () => window.clearInterval(timer)
+  }, [refreshAll])
 
   const value = useMemo(
     () => ({
       orders,
       kpis,
-      workflow,
-      health,
-      audit,
-      failures,
-      setFailure,
+      chaosState,
+      toggleChaos,
+      isTogglingChaos,
+      currentUser,
+      setCurrentUser,
+      logout,
+      userNotifications,
+      adminNotifications,
+      serviceHealth,
+      refreshAll,
+      submitOrder,
       clock,
     }),
-    [orders, kpis, workflow, health, audit, failures, setFailure, clock],
+    [
+      orders,
+      kpis,
+      chaosState,
+      toggleChaos,
+      isTogglingChaos,
+      currentUser,
+      setCurrentUser,
+      logout,
+      userNotifications,
+      adminNotifications,
+      serviceHealth,
+      refreshAll,
+      submitOrder,
+      clock,
+    ],
   )
 
   return <OpsContext.Provider value={value}>{children}</OpsContext.Provider>

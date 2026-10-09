@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { statusTone } from '../../lib/format'
-import type { HealthStatus, OrderStatus, StepState } from '../../types'
+import type { OrderStatus, StepStatus } from '../../types'
 
 export function Card({
   children,
@@ -37,7 +37,7 @@ export function SectionHeader({
     <div className="mb-4 flex items-center justify-between gap-3">
       <div className="flex items-center gap-2.5 min-w-0">
         {icon ? (
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-[#F0F3F8] text-tf-primary">
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-slate-100 text-tf-primary">
             {icon}
           </span>
         ) : null}
@@ -52,45 +52,58 @@ export function SectionHeader({
 }
 
 export function StatusBadge({ status }: { status: OrderStatus }) {
-  const tone = statusTone[status]
+  const tone = statusTone[status] || statusTone.PENDING
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide ${tone.bg} ${tone.text} ring-1 ${tone.ring}`}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-current" />
-      {status.replace('_', ' ')}
+      {tone.label}
     </span>
   )
 }
 
-export function HealthBadge({ status }: { status: HealthStatus }) {
-  const map = {
-    OPERATIONAL: 'text-tf-success bg-tf-success/15 ring-tf-success/30',
-    DEGRADED: 'text-tf-warning bg-tf-warning/15 ring-tf-warning/30',
-    OUTAGE: 'text-tf-danger bg-tf-danger/15 ring-tf-danger/30',
-  } as const
+export function HealthBadge({ status }: { status: 'UP' | 'DOWN' | 'UNKNOWN' | 'OPERATIONAL' | 'DEGRADED' | 'OUTAGE' }) {
+  const isUp = status === 'UP' || status === 'OPERATIONAL'
+  const isDegraded = status === 'DEGRADED'
   return (
-    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${map[status]}`}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${
+        isUp
+          ? 'text-emerald-500 bg-emerald-500/15 ring-emerald-500/30'
+          : isDegraded
+            ? 'text-amber-500 bg-amber-500/15 ring-amber-500/30'
+            : 'text-rose-500 bg-rose-500/15 ring-rose-500/30'
+      }`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${isUp ? 'bg-emerald-500' : isDegraded ? 'bg-amber-500' : 'bg-rose-500'}`} />
       {status}
     </span>
   )
 }
 
-export function StepLamp({ state }: { state: StepState }) {
-  const color =
-    state === 'SUCCESS'
-      ? 'bg-tf-success shadow-[0_0_10px_#22c55e]'
-      : state === 'RUNNING'
-        ? 'bg-tf-warning shadow-[0_0_10px_#f59e0b]'
-        : state === 'FAILED'
-          ? 'bg-tf-danger shadow-[0_0_10px_#ef4444]'
-          : 'bg-slate-500'
+export function StepLamp({ state }: { state: StepStatus }) {
+  const isRunning = state === 'RUNNING' || state === 'COMPENSATING'
+  const isSuccess = state === 'SUCCESS'
+  const isFailed = state === 'FAILED'
+  const isCompensated = state === 'COMPENSATED'
+
+  const color = isSuccess
+    ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]'
+    : isRunning
+      ? 'bg-amber-500 shadow-[0_0_8px_#f59e0b]'
+      : isFailed
+        ? 'bg-rose-500 shadow-[0_0_8px_#f43f5e]'
+        : isCompensated
+          ? 'bg-amber-600'
+          : 'bg-slate-300'
+
   return (
-    <span className="relative inline-flex h-3.5 w-3.5">
-      {state === 'RUNNING' ? (
-        <span className="absolute inset-0 animate-ping rounded-full bg-tf-warning/70" />
+    <span className="relative inline-flex h-3.5 w-3.5 items-center justify-center">
+      {isRunning ? (
+        <span className="absolute inset-0 animate-ping rounded-full bg-amber-400/60" />
       ) : null}
-      <span className={`relative inline-flex h-3.5 w-3.5 rounded-full ${color}`} />
+      <span className={`relative inline-flex h-3 w-3 rounded-full ${color}`} />
     </span>
   )
 }

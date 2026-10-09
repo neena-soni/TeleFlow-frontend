@@ -6,12 +6,12 @@ import { useOps } from '../context/OpsContext'
 import type { OrderStatus } from '../types'
 
 const filters: Array<{ id: 'ALL' | OrderStatus; label: string }> = [
-  { id: 'ALL', label: 'All' },
-  { id: 'IN_PROGRESS', label: 'In progress' },
-  { id: 'RETRYING', label: 'Retrying' },
-  { id: 'ACTIVE', label: 'Active' },
+  { id: 'ALL', label: 'All Orders' },
+  { id: 'IN_PROGRESS', label: 'In Progress' },
+  { id: 'COMPLETED', label: 'Completed' },
+  { id: 'ROLLED_BACK', label: 'Rolled Back' },
   { id: 'FAILED', label: 'Failed' },
-  { id: 'ROLLED_BACK', label: 'Rolled back' },
+  { id: 'PENDING', label: 'Pending' },
 ]
 
 export function OrdersPage() {
@@ -34,8 +34,10 @@ export function OrdersPage() {
             key={f.id}
             type="button"
             onClick={() => setStatus(f.id)}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-              status === f.id ? 'bg-tf-primary text-white' : 'bg-tf-bg text-tf-muted hover:text-white'
+            className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+              status === f.id
+                ? 'bg-tf-primary text-white shadow-sm'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
             {f.label}
@@ -46,7 +48,7 @@ export function OrdersPage() {
         ))}
         {q ? (
           <span className="ml-auto text-xs text-tf-muted">
-            Filter: <span className="text-white">{q}</span>
+            Search: <span className="text-slate-800 font-semibold">{q}</span>
           </span>
         ) : null}
       </div>

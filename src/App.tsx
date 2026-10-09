@@ -14,42 +14,33 @@ import {
   CustomerPortalLayout,
   CustomerOrdersPage,
   CustomerOrderDetailsPage,
-  CustomerTrackingPage,
   CustomerPlansPage,
   CustomerNotificationsPage,
-  CustomerSupportPage,
-  CustomerSettingsPage,
 } from './pages/CustomerPortalPage'
-import {
-  AlertsPage,
-  CatalogPage,
-  CommandCenterPage,
-  DigitalTwinPage,
-  OrderDetailsPage,
-  SlaPage,
-  WarRoomPage,
-} from './pages/FeaturePages'
+import { OrderDetailsPage } from './pages/FeaturePages'
 
 export default function App() {
   return (
     <OpsProvider>
       <BrowserRouter>
         <Routes>
+          {/* Public Auth Routes */}
           <Route path="/login" element={<AuthLandingPage />} />
           <Route path="/login/admin" element={<AuthFormPage mode="login" role="admin" />} />
           <Route path="/signup/admin" element={<AuthFormPage mode="signup" role="admin" />} />
           <Route path="/login/user" element={<AuthFormPage mode="login" role="customer" />} />
           <Route path="/signup/user" element={<AuthFormPage mode="signup" role="customer" />} />
+
+          {/* Customer Self-Service Portal */}
           <Route path="/portal" element={<CustomerPortalLayout />}>
             <Route index element={<CustomerPortalHomePage />} />
             <Route path="orders" element={<CustomerOrdersPage />} />
             <Route path="orders/:orderId" element={<CustomerOrderDetailsPage />} />
-            <Route path="activation" element={<CustomerTrackingPage />} />
             <Route path="plans" element={<CustomerPlansPage />} />
             <Route path="notifications" element={<CustomerNotificationsPage />} />
-            <Route path="support" element={<CustomerSupportPage />} />
-            <Route path="settings" element={<CustomerSettingsPage />} />
           </Route>
+
+          {/* Admin Orchestration Workspace */}
           <Route element={<AppShell />}>
             <Route index element={<Navigate to="/login" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />
@@ -60,12 +51,6 @@ export default function App() {
             <Route path="failures" element={<FailuresPage />} />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="audit" element={<AuditLogsPage />} />
-            <Route path="sla" element={<SlaPage />} />
-            <Route path="war-room" element={<WarRoomPage />} />
-            <Route path="digital-twin" element={<DigitalTwinPage />} />
-            <Route path="command-center" element={<CommandCenterPage />} />
-            <Route path="catalog" element={<CatalogPage />} />
-            <Route path="alerts" element={<AlertsPage />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>

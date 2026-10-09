@@ -1,89 +1,129 @@
 import { motion } from 'framer-motion'
-import { GitBranch } from 'lucide-react'
+import { GitBranch, Layers, ShieldCheck } from 'lucide-react'
 import { useOps } from '../../context/OpsContext'
 import { stepLabel } from '../../lib/format'
+import type { StepName, StepStatus } from '../../types'
 import { Card, SectionHeader, StepLamp } from '../ui/primitives'
 
-function Gauge({ value }: { value: number }) {
-  const r = 70
-  const c = 2 * Math.PI * r
-  const half = c / 2
-  const offset = half - (value / 100) * half
-
-  return (
-    <div className="relative mx-auto w-[200px]">
-      <svg viewBox="0 0 180 110" className="w-full">
-        <path
-          d="M20 100 A70 70 0 0 1 160 100"
-          fill="none"
-          stroke="#E7EBF2"
-          strokeWidth="14"
-          strokeLinecap="round"
-        />
-        <motion.path
-          d="M20 100 A70 70 0 0 1 160 100"
-          fill="none"
-          stroke="#3978F6"
-          strokeWidth="14"
-          strokeLinecap="round"
-          strokeDasharray={half}
-          initial={{ strokeDashoffset: half }}
-          animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1 }}
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-end pb-1">
-        <div className="text-3xl font-semibold text-white">{value}%</div>
-        <div className="text-[11px] text-tf-muted">Saga completion</div>
-      </div>
-    </div>
-  )
-}
+const PIPELINE_STEPS: Array<{ key: StepName; description: string; port: number }> = [
+  { key: 'INVENTORY', description: 'Port & Router Reservation', port: 8082 },
+  { key: 'NETWORK', description: 'VLAN & Bandwidth Slicing', port: 8083 },
+  { key: 'BILLING', description: 'CBS Invoicing & Charge', port: 8084 },
+  { key: 'NOTIFICATION', description: 'Dual Alert Dispatch', port: 8085 },
+]
 
 export function WorkflowStatusCard() {
-  const { workflow } = useOps()
-  const done = workflow.filter((s) => s.state === 'SUCCESS').length
-  const pct = Math.round((done / workflow.length) * 100)
-  const stateCounts = [
-    { label: 'Operational', count: workflow.filter((step) => step.state === 'SUCCESS').length, tone: 'text-tf-success' },
-    { label: 'Retrying', count: workflow.filter((step) => step.state === 'RUNNING').length, tone: 'text-tf-warning' },
-    { label: 'Degraded', count: workflow.filter((step) => step.state === 'FAILED').length, tone: 'text-tf-danger' },
-    { label: 'Pending', count: workflow.filter((step) => step.state === 'PENDING').length, tone: 'text-tf-muted' },
-  ]
+  const { orders, chaosState } = useOps()
+
+  // Calculate step statistics across live orders
+  const stepStats = PIPELINE_STEPS.map((step) => {
+    let completed = 0
+    let running = 0
+    let failed = 0
+
+    orders.forEach((o) => {
+      const exec = (o.steps || []).find((s) => s.stepName === step.key)
+      if (exec) {
+        if (exec.stepStatus === 'SUCCESS') completed++
+        else if (exec.stepStatus === 'RUNNING' || exec.stepStatus === 'COMPENSATING') running++
+        else if (exec.stepStatus === 'FAILED' || exec.stepStatus === 'COMPENSATED') failed++
+      }
+    })
+
+    const isChaos =
+      (step.key === 'INVENTORY' && chaosState.inventory.active) ||
+      (step.key === 'NETWORK' && chaosState.network.active) ||
+      (step.key === 'BILLING' && chaosState.billing.active)
+
+    const currentState: StepStatus = isChaos
+      ? 'FAILED'
+      : running > 0
+        ? 'RUNNING'
+        : 'SUCCESS'
+
+    return {
+      ...step,
+      completed,
+      running,
+      failed,
+      currentState,
+      isChaos,
+    }
+  })
 
   return (
-    <Card className="h-full">
-      <SectionHeader
-        icon={<GitBranch size={15} />}
-        title="Activation Workflow Health"
-        meta="Inventory → Network → Billing → Notification"
-      />
-      <Gauge value={pct} />
-      <div className="mb-4 grid grid-cols-4 gap-2 text-center">
-        {stateCounts.map((item) => (
-          <div key={item.label} className="rounded-lg bg-tf-bg px-1.5 py-2">
-            <div className={`text-base font-semibold ${item.tone}`}>{item.count}</div>
-            <div className="text-[10px] text-tf-muted">{item.label}</div>
+    <Card className="h-full flex flex-col justify-between">
+      <div>
+        <SectionHeader
+          icon={<GitBranch size={16} />}
+          title="Temporal Saga Execution Pipeline"
+          meta="Strict 4-Step Non-Blocking Orchestration Flow"
+        />
+
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3.5 mb-4">
+          <div className="flex items-center gap-2">
+            <ShieldCheck size={16} className="text-blue-500" />
+            <span className="text-xs font-semibold text-slate-800">
+              ACID Guarantee · Zero Partial Activations
+            </span>
           </div>
-        ))}
+          <p className="mt-1 text-[11px] text-slate-500">
+            If any step fails, Temporal coordinates backward compensation to rollback prior completed steps and notifies both Customer & Admin.
+          </p>
+        </div>
+
+        <div className="space-y-2.5">
+          {stepStats.map((step, idx) => (
+            <motion.div
+              key={step.key}
+              layout
+              className={`rounded-xl border p-3 transition-colors ${
+                step.isChaos
+                  ? 'border-rose-300 bg-rose-50/50'
+                  : 'border-tf-line bg-tf-bg/50'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="grid h-5 w-5 place-items-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-700">
+                    {idx + 1}
+                  </span>
+                  <div>
+                    <div className="text-xs font-bold text-slate-800">
+                      {stepLabel(step.key)}
+                      <span className="ml-1.5 font-normal text-[10px] text-slate-400">
+                        Port {step.port}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500">{step.description}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {step.isChaos && (
+                    <span className="text-[10px] font-semibold text-rose-500 uppercase">
+                      Chaos
+                    </span>
+                  )}
+                  <StepLamp state={step.currentState} />
+                </div>
+              </div>
+
+              <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-1.5 text-[10px] text-slate-400">
+                <span>Completed: {step.completed}</span>
+                <span>Active: {step.running}</span>
+                <span>Rolled back: {step.failed}</span>
+              </div>
+            </motion.div>
+          ))}
+        </div>
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        {workflow.map((step) => (
-          <motion.div
-            key={step.step}
-            layout
-            className="rounded-xl border border-tf-line bg-tf-bg/50 px-3 py-2.5"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-300">{stepLabel(step.step)}</span>
-              <StepLamp state={step.state} />
-            </div>
-            <div className="mt-1 text-lg font-semibold text-white">{step.throughput}</div>
-            <div className="text-[10px] uppercase tracking-wide text-tf-muted">
-              {step.state} · {step.latencyMs}ms
-            </div>
-          </motion.div>
-        ))}
+
+      <div className="mt-4 pt-3 border-t border-tf-line flex items-center justify-between text-xs text-slate-500">
+        <span className="flex items-center gap-1.5">
+          <Layers size={13} className="text-slate-400" />
+          Kafka: <code className="font-mono text-[10px] bg-slate-100 px-1 rounded">telecom-order-events</code>
+        </span>
+        <span className="font-medium text-emerald-600">Saga Active</span>
       </div>
     </Card>
   )

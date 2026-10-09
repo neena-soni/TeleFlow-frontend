@@ -1,19 +1,20 @@
 import { AuditTimeline } from '../components/dashboard/AuditTimeline'
 import { Card, SectionHeader } from '../components/ui/primitives'
 import { useOps } from '../context/OpsContext'
+import { ShieldAlert } from 'lucide-react'
 
 export function AuditLogsPage() {
-  const { audit } = useOps()
+  const { adminNotifications } = useOps()
 
   return (
     <Card>
       <SectionHeader
-        title="Control-plane activity"
-        meta={`${audit.length} events in the current window · append-only mock feed`}
+        icon={<ShieldAlert size={16} className="text-blue-600" />}
+        title="Technical System Audit Logs"
+        meta={`${adminNotifications.length} audit alert(s) dispatched by Notification Service (Port 8085)`}
       />
-      <div className="mb-4 rounded-xl border border-tf-line bg-tf-bg/50 p-3 font-mono text-[11px] text-tf-muted">
-        10:01 Order Created → 10:02 Inventory Reserved → 10:03 Network Activated → 10:04 Billing Failed → 10:05 Retry
-        Started
+      <div className="mb-4 rounded-xl border border-blue-500/20 bg-blue-50/50 p-3 font-mono text-xs text-blue-800">
+        Pipeline: Temporal Coordinator → Kafka Order Events → Dual-Role Notification Dispatch
       </div>
       <AuditTimeline maxHeight="640px" />
     </Card>

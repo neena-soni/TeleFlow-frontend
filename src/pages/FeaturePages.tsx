@@ -1,101 +1,164 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Activity,
-  ArrowDown,
   ArrowRight,
   BrainCircuit,
   Check,
-  CircleAlert,
-  Clock3,
-  Database,
   GitBranch,
-  Network,
-  Play,
-  RotateCcw,
-  Server,
-  ShieldCheck,
-  TriangleAlert,
-  UserRound,
-  Workflow,
   X,
-  Zap,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Card, SectionHeader, StatusBadge, StepLamp } from '../components/ui/primitives'
 import { useOps } from '../context/OpsContext'
-import { serviceLabel, stepLabel } from '../lib/format'
+import { formatDuration, planLabel, stepLabel } from '../lib/format'
 
-const events = [
+type EventTone = 'info' | 'success' | 'warning' | 'danger'
+
+const events: ReadonlyArray<readonly [string, string, string, EventTone]> = [
   ['10:01', 'Order Created', 'Customer order accepted by Order API', 'info'],
-  ['10:02', 'Inventory Reserved', 'ONT + GPON port allocated · SKU FTTH-ONT-XGS', 'success'],
-  ['10:03', 'Network Activated', 'VLAN 4094 provisioned on OLT-PUNE-14', 'success'],
-  ['10:04', 'Billing Failed', 'Rating engine timeout · HTTP 504', 'danger'],
-  ['10:05', 'Retry Started', 'Transient policy · attempt 2 of 4 · backoff 8s', 'warning'],
-  ['10:06', 'Retry Success', 'Billing charge accepted by CBS-PROD-2', 'success'],
-  ['10:07', 'Notification Sent', 'SMS + email delivery acknowledged', 'success'],
-] as const
+  ['10:02', 'Inventory Reserved', 'Port + ONT router allocation confirmed', 'success'],
+  ['10:03', 'Network Activated', 'VLAN slice provisioned with guaranteed QoS', 'success'],
+  ['10:04', 'Billing Processed', 'CBS payment invoice generated and charged', 'success'],
+  ['10:05', 'Notification Sent', 'Dual alerts dispatched to Customer and Admin', 'success'],
+]
 
-const tone = { info: 'border-tf-primary/30 bg-tf-primary/10 text-tf-primary', success: 'border-tf-success/30 bg-tf-success/10 text-tf-success', warning: 'border-tf-warning/30 bg-tf-warning/10 text-tf-warning', danger: 'border-tf-danger/30 bg-tf-danger/10 text-tf-danger' }
+const tone = {
+  info: 'border-tf-primary/30 bg-tf-primary/10 text-tf-primary',
+  success: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600',
+  warning: 'border-amber-500/30 bg-amber-500/10 text-amber-600',
+  danger: 'border-rose-500/30 bg-rose-500/10 text-rose-600',
+}
 
-function Metric({ label, value, detail, color = 'text-white' }: { label: string; value: string; detail?: string; color?: string }) {
-  return <div className="rounded-xl border border-tf-line bg-tf-bg/40 p-4"><div className="text-[10px] uppercase tracking-[0.15em] text-tf-muted">{label}</div><div className={`mt-2 text-2xl font-semibold ${color}`}>{value}</div>{detail ? <div className="mt-1 text-xs text-tf-muted">{detail}</div> : null}</div>
+function ClipboardIcon() {
+  return <GitBranch size={16} />
 }
 
 function Timeline() {
-  const [open, setOpen] = useState<number | null>(3)
-  return <Card><SectionHeader icon={<Activity size={16} />} title="Live workflow timeline" meta="Event stream · order TF-26-08421" /><div className="relative ml-2 border-l border-tf-line pl-7">{events.map(([time, title, detail, eventTone], i) => <motion.button key={title} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * .06 }} onClick={() => setOpen(open === i ? null : i)} className="relative mb-5 block w-full text-left last:mb-0"><span className={`absolute -left-[36px] top-1 grid h-4 w-4 place-items-center rounded-full border ${tone[eventTone]}`}>{eventTone === 'success' ? <Check size={10} /> : eventTone === 'danger' ? <X size={10} /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}</span><div className="flex items-center gap-3"><span className="font-mono text-[11px] text-tf-muted">{time}</span><span className="text-sm font-medium text-white">{title}</span><span className="ml-auto text-[10px] text-tf-muted">{open === i ? 'Collapse' : 'Details'}</span></div><AnimatePresence>{open === i ? <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden"><div className={`mt-2 rounded-lg border px-3 py-2 text-xs ${tone[eventTone]}`}>{detail}</div></motion.div> : null}</AnimatePresence></motion.button>)}</div></Card>
+  const [open, setOpen] = useState<number | null>(null)
+  return (
+    <Card>
+      <SectionHeader icon={<Activity size={16} />} title="Saga Activity Log" meta="Temporal event timeline" />
+      <div className="relative ml-2 border-l border-tf-line pl-7">
+        {events.map(([time, title, detail, eventTone], i) => (
+          <motion.button
+            key={title}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.05 }}
+            onClick={() => setOpen(open === i ? null : i)}
+            className="relative mb-4 block w-full text-left last:mb-0"
+          >
+            <span
+              className={`absolute -left-[36px] top-1 grid h-4 w-4 place-items-center rounded-full border ${tone[eventTone]}`}
+            >
+              {eventTone === 'success' ? <Check size={10} /> : eventTone === 'danger' ? <X size={10} /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+            </span>
+            <div className="flex items-center gap-3">
+              <span className="font-mono text-[11px] text-tf-muted">{time}</span>
+              <span className="text-xs font-semibold text-slate-800">{title}</span>
+              <span className="ml-auto text-[10px] text-tf-muted">{open === i ? 'Collapse' : 'Details'}</span>
+            </div>
+            <AnimatePresence>
+              {open === i ? (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                  <div className={`mt-2 rounded-lg border px-3 py-2 text-xs ${tone[eventTone]}`}>{detail}</div>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+          </motion.button>
+        ))}
+      </div>
+    </Card>
+  )
 }
 
 export function OrderDetailsPage() {
   const { id } = useParams()
   const { orders } = useOps()
-  const order = orders.find((item) => item.id === id) ?? orders[0]
-  return <div className="space-y-4">
-    <div className="flex items-center gap-3"><Link to="/orders" className="text-xs text-tf-muted hover:text-white">Orders</Link><ArrowRight size={13} className="text-tf-muted" /><span className="font-mono text-xs text-tf-primary">{order.id}</span><StatusBadge status={order.status} /></div>
-    <div className="grid gap-4 xl:grid-cols-[1.3fr_.7fr]"><Card><SectionHeader icon={<ClipboardIcon />} title="Order summary" meta="Saga execution record" /><div className="grid gap-3 sm:grid-cols-3">{[['Customer', order.customer], ['MSISDN', order.msisdn], ['Service', serviceLabel(order.serviceType)], ['Circle', `${order.circle} · West`], ['Activation duration', `${order.durationSec}s`], ['Retry count', String(order.attempts)], ['Compensation count', order.status === 'ROLLED_BACK' ? '2' : '0']].map(([label, value]) => <div key={label}><div className="text-[10px] uppercase tracking-wider text-tf-muted">{label}</div><div className="mt-1 text-sm font-medium text-white">{value}</div></div>)}</div></Card><Card><SectionHeader icon={<BrainCircuit size={16} />} title="AI failure diagnosis" meta="Simulation · confidence model" /><div className="rounded-xl border border-tf-warning/25 bg-tf-warning/10 p-3"><div className="text-xs text-tf-muted">Likely cause</div><div className="mt-1 font-medium text-tf-warning">Billing timeout</div><div className="mt-3 flex justify-between text-xs"><span className="text-tf-muted">Confidence</span><span className="font-mono text-white">92%</span></div><div className="mt-2 h-1.5 rounded-full bg-tf-bg"><div className="h-full w-[92%] rounded-full bg-tf-warning" /></div></div><div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg bg-tf-bg/50 p-2"><span className="text-tf-muted">Affected system</span><div className="mt-1 text-white">CBS-PROD-2</div></div><div className="rounded-lg bg-tf-bg/50 p-2"><span className="text-tf-muted">Recovery ETA</span><div className="mt-1 text-white">5 minutes</div></div></div></Card></div>
-    <div className="grid gap-4 xl:grid-cols-2"><Card><SectionHeader title="Saga progress" meta="Compensation is armed for every completed step." /><div className="grid grid-cols-4 gap-2">{(['INVENTORY', 'NETWORK', 'BILLING', 'NOTIFICATION'] as const).map((step, i) => { const state = i < 2 ? 'SUCCESS' : i === 2 ? 'RUNNING' : 'PENDING'; return <div key={step} className="rounded-xl border border-tf-line bg-tf-bg/40 p-3 text-center"><StepLamp state={state} /><div className="mt-2 text-xs text-white">{stepLabel(step)}</div><div className="mt-1 text-[10px] text-tf-muted">{state}</div></div> })}</div><div className="mt-5 grid grid-cols-2 gap-3 text-xs"><div><div className="mb-2 text-tf-muted">Retry history</div><div className="space-y-2 text-slate-300"><div>Attempt 1 <span className="float-right text-tf-danger">Failed</span></div><div>Attempt 2 <span className="float-right text-tf-danger">Failed</span></div><div>Attempt 3 <span className="float-right text-tf-warning">Running</span></div></div></div><div><div className="mb-2 text-tf-muted">Compensation history</div><div className="space-y-2 text-slate-300"><div>Rollback Network <Check className="float-right text-tf-success" size={14} /></div><div>Release Inventory <Check className="float-right text-tf-success" size={14} /></div></div></div></div></Card><Timeline /></div>
-    <Card><SectionHeader icon={<TriangleAlert size={16} />} title="Error details" /><div className="grid gap-3 sm:grid-cols-3"><div><div className="text-xs text-tf-muted">Failure type</div><div className="mt-1 text-sm text-tf-danger">TRANSIENT_TIMEOUT</div></div><div><div className="text-xs text-tf-muted">Root cause</div><div className="mt-1 text-sm text-white">Rating engine exceeded 2.4s SLA</div></div><div><div className="text-xs text-tf-muted">Timestamp</div><div className="mt-1 font-mono text-sm text-white">10:04:18 IST</div></div></div></Card>
-  </div>
+  const order = orders.find((item) => String(item.id) === id || item.trackingId === id) ?? orders[0]
+
+  if (!order) {
+    return (
+      <div className="py-12 text-center text-slate-400">
+        <Link to="/orders" className="text-xs text-tf-primary hover:underline">← Back to Orders</Link>
+        <p className="mt-2 text-sm">No order selected or found.</p>
+      </div>
+    )
+  }
+
+  const isRollback = order.status === 'ROLLED_BACK' || order.status === 'FAILED'
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <Link to="/orders" className="text-xs text-tf-muted hover:text-slate-900">Orders</Link>
+        <ArrowRight size={13} className="text-tf-muted" />
+        <span className="font-mono text-xs text-tf-primary font-bold">{order.trackingId}</span>
+        <StatusBadge status={order.status} />
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.3fr_.7fr]">
+        <Card>
+          <SectionHeader icon={<ClipboardIcon />} title="Order Summary" meta="Saga execution record" />
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              ['Tracking ID', order.trackingId],
+              ['Customer ID', order.customerId],
+              ['Plan', planLabel(order.planName)],
+              ['Email', order.customerEmail || 'customer@teleflow.io'],
+              ['Duration', formatDuration(order.activationDurationMs)],
+              ['Saga Status', order.status],
+              ['Compensation', isRollback ? 'Triggered (Auto-refunded)' : 'None (Active)'],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <div className="text-[10px] uppercase tracking-wider text-tf-muted">{label}</div>
+                <div className="mt-1 text-xs font-semibold text-slate-800">{value}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card>
+          <SectionHeader icon={<BrainCircuit size={16} />} title="Saga Observability" meta="Temporal Engine Diagnostics" />
+          <div className={`rounded-xl border p-3 ${isRollback ? 'border-rose-300 bg-rose-50 text-rose-900' : 'border-emerald-300 bg-emerald-50 text-emerald-900'}`}>
+            <div className="text-xs font-semibold">{isRollback ? 'Compensating Rollback Triggered' : 'Happy Path Execution'}</div>
+            <div className="mt-1 font-medium text-xs">
+              {order.failureReason || (isRollback ? 'Downstream microservice failed; saga compensated.' : 'All activities succeeded.')}
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
+              <span className="text-slate-400">Order ID</span>
+              <div className="mt-1 font-mono text-slate-800">#{order.id}</div>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
+              <span className="text-slate-400">Created</span>
+              <div className="mt-1 text-slate-800">{order.createdAt ? new Date(order.createdAt).toLocaleTimeString() : 'Recent'}</div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <SectionHeader title="Saga 4-Step Progress" meta="Compensation is armed for completed steps." />
+          <div className="grid grid-cols-4 gap-2">
+            {(['INVENTORY', 'NETWORK', 'BILLING', 'NOTIFICATION'] as const).map((stepName) => {
+              const step = (order.steps || []).find((s) => s.stepName === stepName)
+              const state = step ? step.stepStatus : 'PENDING'
+              return (
+                <div key={stepName} className="rounded-xl border border-tf-line bg-slate-50/60 p-3 text-center">
+                  <StepLamp state={state} />
+                  <div className="mt-2 text-xs font-bold text-slate-800">{stepLabel(stepName)}</div>
+                  <div className="mt-1 text-[10px] text-slate-400">{state}</div>
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+        <Timeline />
+      </div>
+    </div>
+  )
 }
-
-function ClipboardIcon() { return <GitBranch size={16} /> }
-
-export function ReplayPage() {
-  const [running, setRunning] = useState(false)
-  const [step, setStep] = useState(5)
-  const nodes = ['Order Created', 'Inventory', 'Network', 'Billing', 'Notification']
-  function replay() { setRunning(true); setStep(0); nodes.forEach((_, i) => window.setTimeout(() => setStep(i), i * 600)); window.setTimeout(() => setRunning(false), 3200) }
-  return <div className="space-y-4"><Card className="tf-grid-line"><SectionHeader icon={<RotateCcw size={16} />} title="Workflow replay center" meta="Replay a production-like saga without touching live systems." action={<button onClick={replay} className="inline-flex items-center gap-2 rounded-lg bg-tf-primary px-3 py-2 text-xs font-semibold text-white"><Play size={13} />{running ? 'Replaying…' : 'Replay execution'}</button>} /><div className="flex flex-wrap items-center justify-center gap-2 py-12">{nodes.map((node, i) => <div key={node} className="flex items-center gap-2">{i ? <ArrowRight className={i <= step ? 'text-tf-success' : 'text-tf-muted'} size={18} /> : null}<motion.div animate={i === step ? { scale: [1, 1.08, 1] } : {}} className={`rounded-xl border px-4 py-3 text-center ${i < step ? 'border-tf-success/40 bg-tf-success/10' : i === step ? 'border-tf-warning/50 bg-tf-warning/10' : 'border-tf-line bg-tf-bg/50'}`}><div className="text-xs font-medium text-white">{node}</div><div className="mt-1 text-[10px] text-tf-muted">{i < step ? 'COMPLETE' : i === step ? 'RUNNING' : 'PENDING'}</div></motion.div></div>)}</div><div className="mx-auto max-w-xl rounded-xl border border-tf-danger/25 bg-tf-danger/10 p-4 text-center text-sm text-tf-danger">Failure branch: Billing Failed <ArrowDown className="mx-2 inline" size={14} /> Retry <ArrowDown className="mx-2 inline" size={14} /> Retry <ArrowDown className="mx-2 inline" size={14} /> Rollback <ArrowDown className="mx-2 inline" size={14} /> Compensation</div></Card></div>
-}
-
-export function SlaPage() {
-  const rows = [['FTTH activation', '42s', '4', '128s', '99.2%', 'HEALTHY'], ['5G postpaid', '38s', '2', '94s', '99.7%', 'HEALTHY'], ['Enterprise MPLS', '118s', '7', '412s', '96.8%', 'WARNING'], ['SIM swap', '26s', '11', '680s', '94.1%', 'CRITICAL']]
-  return <div className="space-y-4"><div className="grid gap-3 md:grid-cols-4"><Metric label="Activation SLA" value="60s" detail="Target p95" /><Metric label="Current average" value="42s" detail="-8s vs yesterday" color="text-tf-success" /><Metric label="Breached orders" value="24" detail="Last 24 hours" color="text-tf-warning" /><Metric label="SLA compliance" value="98.6%" detail="Across all circles" color="text-tf-success" /></div><Card><SectionHeader icon={<Clock3 size={16} />} title="SLA monitoring center" meta="Service activation commitments by product family" /><div className="overflow-x-auto"><table className="w-full min-w-[680px] text-left text-sm"><thead className="text-[10px] uppercase tracking-wider text-tf-muted"><tr>{['Service','Average','Breached','Worst delay','Compliance','State'].map((x) => <th key={x} className="pb-3 font-medium">{x}</th>)}</tr></thead><tbody>{rows.map((r) => <tr key={r[0]} className="border-t border-tf-line"><td className="py-3 text-white">{r[0]}</td>{r.slice(1, 5).map((x) => <td key={x} className="py-3 font-mono text-xs text-slate-300">{x}</td>)}<td className="py-3"><span className={r[5] === 'HEALTHY' ? 'text-tf-success' : r[5] === 'WARNING' ? 'text-tf-warning' : 'text-tf-danger'}>{r[5]}</span></td></tr>)}</tbody></table></div></Card></div>
-}
-
-export function WarRoomPage() {
-  const { orders } = useOps()
-  return <div className="space-y-4"><div className="rounded-2xl border border-tf-danger/30 bg-tf-danger/10 p-5"><div className="flex flex-wrap items-center gap-3"><span className="rounded-full bg-tf-danger px-2.5 py-1 text-[10px] font-bold text-white">SEV-1</span><h2 className="text-lg font-semibold text-white">Billing rating engine degradation</h2><span className="text-xs text-tf-muted">Started 10:04 IST · 18m active</span></div><p className="mt-3 max-w-3xl text-sm text-slate-300">CBS-PROD-2 is timing out on new subscription rating. Orchestrator is holding affected sagas, retrying transient failures, and compensating orders at risk of partial activation.</p></div><div className="grid gap-3 md:grid-cols-4"><Metric label="Affected services" value="Billing" color="text-tf-danger" /><Metric label="Affected orders" value="37" color="text-tf-warning" /><Metric label="Affected circles" value="MH · KA · DL" /><Metric label="Recovery progress" value="68%" color="text-tf-success" /></div><div className="grid gap-4 xl:grid-cols-2"><Card><SectionHeader title="Recovery queues" /><div className="space-y-3"><Queue label="Retry queue" value="18 orders" color="bg-tf-warning" /><Queue label="Rollback queue" value="6 orders" color="bg-tf-danger" /><Queue label="Recovered" value="25 orders" color="bg-tf-success" /></div></Card><Card><SectionHeader title="Recovery timeline" /><Timeline /></Card></div><Card><SectionHeader title="Executive summary" meta={`${orders.filter((o) => o.status === 'RETRYING').length} active retries from live simulation`} /><p className="text-sm leading-6 text-slate-300">No customer-facing partial states detected. Inventory and network reservations remain protected by saga locks; the retry policy is recovering transient billing failures before the 60-second activation SLA.</p></Card></div>
-}
-function Queue({ label, value, color }: { label: string; value: string; color: string }) { return <div><div className="flex justify-between text-xs"><span className="text-slate-300">{label}</span><span className="font-mono text-white">{value}</span></div><div className="mt-2 h-2 rounded-full bg-tf-bg"><div className={`h-full w-2/3 rounded-full ${color}`} /></div></div> }
-
-const twinNodes = [['Inventory', '99.98%', 'operational', 18, 20], ['Network', '99.94%', 'operational', 50, 15], ['Workflow Engine', '99.97%', 'operational', 50, 60], ['Billing', '99.41%', 'degraded', 82, 20], ['Notification', '99.99%', 'operational', 82, 62]] as const
-export function DigitalTwinPage() {
-  const { failures } = useOps()
-  const billingDegraded = failures.billing !== 'NONE'
-  return <div className="space-y-4"><div className="grid gap-3 md:grid-cols-4"><Metric label="Affected orders" value={failures.billing === 'NONE' ? '0' : '37'} color={failures.billing === 'NONE' ? 'text-tf-success' : 'text-tf-warning'} /><Metric label="Risk score" value={failures.billing === 'PERMANENT' ? '86/100' : '24/100'} color={failures.billing === 'PERMANENT' ? 'text-tf-danger' : 'text-tf-warning'} /><Metric label="Predicted rollbacks" value={failures.billing === 'PERMANENT' ? '12' : '2'} /><Metric label="Predicted recovery" value={failures.billing === 'NONE' ? '—' : '5m'} /></div><Card><SectionHeader icon={<Network size={16} />} title="Telecom digital twin" meta="Live topology simulation · failure injection aware" /><div className="relative mx-auto min-h-[420px] max-w-4xl rounded-xl border border-tf-line bg-tf-bg/60 tf-grid-line"><svg className="absolute inset-0 h-full w-full"><path d="M20% 24% L50% 60% L82% 20% M50% 60% L50% 15% M50% 60% L82% 62%" fill="none" stroke="rgb(59 130 246 / .35)" strokeWidth="2" strokeDasharray="6 6" /></svg>{twinNodes.map(([name, uptime, baseState, left, top]) => { const state = name === 'Billing' ? (billingDegraded ? 'degraded' : 'operational') : baseState; return <motion.div key={name} animate={state === 'degraded' ? { boxShadow: ['0 0 0px #f59e0b', '0 0 22px #f59e0b', '0 0 0px #f59e0b'] } : {}} transition={{ repeat: Infinity, duration: 2 }} className={`absolute w-36 -translate-x-1/2 -translate-y-1/2 rounded-xl border p-3 text-center ${state === 'degraded' ? 'border-tf-warning/60 bg-tf-warning/15' : 'border-tf-success/30 bg-tf-surface'}`} style={{ left: `${left}%`, top: `${top}%` }}><Server className={`mx-auto ${state === 'degraded' ? 'text-tf-warning' : 'text-tf-success'}`} size={18} /><div className="mt-2 text-xs font-medium text-white">{name}</div><div className="mt-1 text-[10px] text-tf-muted">{uptime} · {state}</div></motion.div> })}</div></Card></div>
-}
-
-export function CommandCenterPage() {
-  return <div className="space-y-4"><div className="grid gap-3 md:grid-cols-4"><Metric label="Total activations" value="18,416" /><Metric label="Success rate" value="96.4%" color="text-tf-success" /><Metric label="Failure rate" value="1.0%" color="text-tf-danger" /><Metric label="Rollback rate" value="1.0%" color="text-tf-warning" /></div><div className="grid gap-3 md:grid-cols-4"><Metric label="Revenue protected" value="₹48.2L" color="text-tf-success" /><Metric label="Recovered activations" value="1,019" /><Metric label="Retry success rate" value="84.7%" /><Metric label="Average activation" value="42s" /></div><Card><SectionHeader icon={<ShieldCheck size={16} />} title="Executive command center" meta="Business outcomes protected by orchestration" /><div className="tf-grid-line rounded-xl border border-tf-line p-8 text-center"><div className="text-5xl font-semibold text-white">₹48.2L</div><div className="mt-2 text-sm text-tf-muted">customer revenue protected from partial activation</div><div className="mx-auto mt-6 h-2 max-w-xl rounded-full bg-tf-bg"><div className="h-full w-[96%] rounded-full bg-tf-success" /></div><div className="mt-2 text-xs text-tf-success">96.4% activation success · +2.1% month on month</div></div></Card></div>
-}
-
-const catalog = [['FTTH 300 Mbps', 'FTTH', '4,820', '98.8%', '38s'], ['FTTH 1 Gbps', 'FTTH', '3,140', '97.9%', '44s'], ['5G Postpaid', 'Mobility', '5,912', '96.8%', '31s'], ['5G Enterprise', 'Enterprise', '782', '94.6%', '86s'], ['VoLTE Voice', 'Mobility', '1,460', '99.1%', '22s'], ['eSIM Activation', 'Mobility', '1,108', '98.4%', '19s'], ['SIM Swap', 'Mobility', '634', '97.6%', '26s'], ['Number Portability', 'Mobility', '418', '95.8%', '72s'], ['IPTV Bundle', 'FTTH', '1,024', '98.1%', '47s'], ['Enterprise MPLS VPN', 'Enterprise', '214', '96.8%', '118s']]
-export function CatalogPage() { return <Card><SectionHeader icon={<Zap size={16} />} title="Telecom service catalog" meta="Activation performance by commercial service" /><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{catalog.map(([name, family, volume, success, duration]) => <div key={name} className="rounded-xl border border-tf-line bg-tf-bg/40 p-4"><div className="flex justify-between"><div className="font-medium text-white">{name}</div><span className="text-[10px] text-tf-muted">{family}</span></div><div className="mt-4 grid grid-cols-3 gap-2 text-xs"><div><div className="text-tf-muted">Volume</div><div className="mt-1 text-white">{volume}</div></div><div><div className="text-tf-muted">Success</div><div className="mt-1 text-tf-success">{success}</div></div><div><div className="text-tf-muted">Avg time</div><div className="mt-1 text-white">{duration}</div></div></div></div>)}</div></Card> }
-
-export function AlertsPage() { const [acknowledged, setAcknowledged] = useState<string[]>([]); const alerts = [['Billing Service Degraded', 'CRITICAL', '10:04:18', '37'], ['Network Latency High', 'WARNING', '09:58:42', '12'], ['Retry Threshold Exceeded', 'CRITICAL', '09:55:10', '6'], ['Rollback Triggered', 'INFO', '09:51:04', '2'], ['Inventory Capacity Low', 'WARNING', '09:44:28', '18']]; return <Card><SectionHeader icon={<CircleAlert size={16} />} title="NOC alert center" meta="Operational signals requiring acknowledgement" /><div className="space-y-2">{alerts.map(([title, severity, timestamp, affected]) => { const isAcknowledged = acknowledged.includes(title); return <div key={title} className="flex flex-wrap items-center gap-3 rounded-xl border border-tf-line bg-tf-bg/40 p-3"><div className={`grid h-8 w-8 place-items-center rounded-lg ${severity === 'CRITICAL' ? 'bg-tf-danger/15 text-tf-danger' : severity === 'WARNING' ? 'bg-tf-warning/15 text-tf-warning' : 'bg-tf-primary/15 text-tf-primary'}`}><CircleAlert size={15} /></div><div className="min-w-[180px] flex-1"><div className="text-sm font-medium text-white">{title}</div><div className="text-[11px] text-tf-muted">{timestamp} IST · {affected} affected orders</div></div><span className="text-[10px] font-semibold text-tf-muted">{severity}</span><button onClick={() => setAcknowledged((current) => current.includes(title) ? current.filter((item) => item !== title) : [...current, title])} className={`rounded-lg border px-3 py-1.5 text-[11px] ${isAcknowledged ? 'border-tf-success/30 text-tf-success' : 'border-tf-line text-slate-300 hover:text-white'}`}>{isAcknowledged ? 'Acknowledged' : 'Acknowledge'}</button></div> })}</div></Card> }
-
-export function DemoPage() { const { setFailure } = useOps(); const demos = [['Successful Activation', 'NONE', 'text-tf-success'], ['Transient Failure', 'TRANSIENT', 'text-tf-warning'], ['Permanent Failure', 'PERMANENT', 'text-tf-danger'], ['Billing Timeout', 'TIMEOUT', 'text-tf-warning'], ['Worker Crash', 'PERMANENT', 'text-tf-danger']] as const; return <div className="space-y-4"><Card className="tf-grid-line"><SectionHeader icon={<Play size={16} />} title="Hackathon demo mode" meta="Trigger a complete, observable saga journey in one click." /><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{demos.map(([label, mode, color]) => <button key={label} onClick={() => setFailure('billing', mode)} className="rounded-xl border border-tf-line bg-tf-bg/60 p-4 text-left transition hover:-translate-y-0.5 hover:border-tf-primary/50"><div className={`mb-4 grid h-9 w-9 place-items-center rounded-lg bg-white/5 ${color}`}><Play size={15} /></div><div className="text-sm font-medium text-white">{label}</div><div className="mt-1 text-[11px] text-tf-muted">Run billing saga</div></button>)}</div></Card><Card><SectionHeader title="Demo script" /><div className="flex flex-wrap items-center justify-center gap-3 py-5 text-xs text-tf-muted">{['Order created', 'Inventory reserved', 'Network active', 'Billing', 'Notification'].map((x, i) => <div key={x} className="flex items-center gap-3"><span className="rounded-lg border border-tf-line bg-tf-bg/50 px-3 py-2 text-white">{x}</span>{i < 4 ? <ArrowRight size={14} /> : null}</div>)}</div></Card></div> }
-
-export function ArchitecturePage() { const layers = [['Customer Order', UserRound], ['Order API', GitBranch], ['Workflow Engine', Workflow], ['Inventory · Network · Billing · Notification', Network], ['Database', Database]] as const; return <Card className="tf-grid-line"><SectionHeader icon={<GitBranch size={16} />} title="Architecture center" meta="Event-driven activation fabric · frontend simulation" /><div className="mx-auto flex max-w-2xl flex-col items-center py-6">{layers.map(([label, Icon], i) => <div key={label} className="flex flex-col items-center"><motion.div whileHover={{ scale: 1.03 }} className={`flex w-full items-center justify-center gap-3 rounded-xl border p-4 ${i === 2 ? 'border-tf-primary/50 bg-tf-primary/10' : 'border-tf-line bg-tf-surface'}`}><Icon size={18} className={i === 2 ? 'text-tf-primary' : 'text-tf-muted'} /><span className="text-sm font-medium text-white">{label}</span></motion.div>{i < layers.length - 1 ? <div className="flex h-12 flex-col items-center text-tf-primary"><div className="h-7 border-l border-dashed border-tf-primary/50" /><ArrowDown size={15} /></div> : null}</div>)}</div></Card> }
