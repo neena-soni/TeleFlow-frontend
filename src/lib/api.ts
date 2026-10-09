@@ -8,14 +8,21 @@ import type {
   TelecomOrder,
 } from '../types'
 
-// Default ports matching backend architecture
-const GATEWAY_BASE = 'http://localhost:8080'
-const ORCHESTRATOR_BASE = 'http://localhost:8081'
-const INVENTORY_BASE = 'http://localhost:8082'
-const NETWORK_BASE = 'http://localhost:8083'
-const BILLING_BASE = 'http://localhost:8084'
-const NOTIFICATION_BASE = 'http://localhost:8085'
-const USER_BASE = 'http://localhost:8086'
+// Base URLs: When deployed on HTTPS (Vercel), use relative paths to route through Vercel's reverse proxy, preventing browser Mixed Content and CORS blocks!
+const isProd = import.meta.env.PROD
+const rawGateway = (import.meta as any).env?.VITE_GATEWAY_URL
+const safeGateway =
+  (typeof window !== 'undefined' && window.location.protocol === 'https:' && rawGateway?.startsWith('http://'))
+    ? ''
+    : (rawGateway || (isProd ? '' : 'http://localhost:8080'))
+
+const GATEWAY_BASE = safeGateway
+const ORCHESTRATOR_BASE = `${GATEWAY_BASE}`
+const INVENTORY_BASE = isProd ? '' : 'http://localhost:8082'
+const NETWORK_BASE = isProd ? '' : 'http://localhost:8083'
+const BILLING_BASE = isProd ? '' : 'http://localhost:8084'
+const NOTIFICATION_BASE = isProd ? '' : 'http://localhost:8085'
+const USER_BASE = isProd ? '' : 'http://localhost:8086'
 
 export const SUPPORTED_PLANS: Record<PlanName, { name: string; speed: string; price: string; features: string[] }> = {
   '5G_UNLIMITED': {

@@ -1,0 +1,36 @@
+{
+  "rewrites": [
+    {
+      "source": "/auth/:path*",
+      "destination": "http://35.255.72.75:8080/auth/:path*"
+    },
+    {
+      "source": "/api/inventory/:path*",
+      "destination": "http://35.255.72.75:8082/api/inventory/:path*"
+    },
+    {
+      "source": "/api/network/:path*",
+      "destination": "http://35.255.72.75:8083/api/network/:path*"
+    },
+    {
+      "source": "/api/billing/:path*",
+      "destination": "http://35.255.72.75:8084/api/billing/:path*"
+    },
+    {
+      "source": "/api/notify/:path*",
+      "destination": "http://35.255.72.75:8085/api/notify/:path*"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "http://35.255.72.75:8080/api/:path*"
+    },
+    {
+      "source": "/actuator/:path*",
+      "destination": "http://35.255.72.75:8080/actuator/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
